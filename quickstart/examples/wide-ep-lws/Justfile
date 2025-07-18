@@ -1,0 +1,18 @@
+NAMESPACE := "tms-d"
+KN := "kubectl -n tms-d"
+
+restart:
+  helmfile --selector managedBy=helmfile destroy \
+  && helmfile --selector managedBy=helmfile apply helmfile.yaml
+
+hf_secret:
+  kubectl create secret generic hf-secret \
+  --from-literal=HF_TOKEN=${HF_TOKEN} \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+start-bench:
+  kubectl apply -f benchmark-interactive-pod.yaml
+
+exec-bench:
+    kubectl cp Justfile.remote {{NAMESPACE}}/benchmark-interactive:/app/Justfile \
+    && {{KN}} exec -it benchmark-interactive -- /bin/bash

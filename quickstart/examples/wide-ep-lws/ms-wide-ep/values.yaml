@@ -1,12 +1,12 @@
 multinode: true
 
 modelArtifacts:
-  uri: "hf://Qwen/Qwen3-30B-A3B-FP8"
+  uri: "hf://deepseek-ai/DeepSeek-R1-0528"
   size: 100Gi
   authSecretName: "llm-d-hf-token"
 
 routing:
-  modelName: Qwen/Qwen3-30B-A3B-FP8
+  modelName: deepseek-ai/DeepSeek-R1-0528
   servicePort: 8000
   parentRefs:
     - group: gateway.networking.k8s.io
@@ -14,11 +14,10 @@ routing:
       name: infra-wide-ep-inference-gateway
 
   proxy:
-    image: quay.io/grpereir/llm-d-routing-sidecar:0.5.0-rc.2
-    # target port on which VLLM should listen
-    targetPort: 8200
+    image: "ghcr.io/llm-d/llm-d-routing-sidecar:v0.2.0-RC1"
+    secure: false
     # Specify a connector to overwrite the default: `nixl`
-    connector: nixl
+    connector: nixlv2
 
   inferenceModel:
     create: false
@@ -47,7 +46,7 @@ decode:
     tensor: 1 # these will be derived based performance testing
   containers:
     - name: vllm-worker-decode
-      image: "quay.io/tms/llm-d-cks:0.2.0-beta0"
+      image: "quay.io/wseaton/vllm:llmd-multistage-4"
       imagePullPolicy: Always
       workingDir: /code
       command: ["/bin/bash","-c"]
@@ -100,19 +99,21 @@ decode:
           #################
           export CUDA_VISIBLE_DEVICES=${ALLOCATED_GPU_INDICES}
 
-          # vllm serve \
+          # Decode worker
           source /opt/vllm/bin/activate
           exec vllm serve \
-            Qwen/Qwen3-30B-A3B-FP8 \
+            deepseek-ai/DeepSeek-R1-0528 \
             --port 8200 \
             --disable-log-requests \
+            --disable-uvicorn-access-log \
             --enable-expert-parallel \
             --tensor-parallel-size $TP_SIZE \
-            --data-parallel-size $(LWS_GROUP_SIZE) \
-            --data-parallel-address $(LWS_LEADER_ADDRESS) \
+            --data-parallel-size ${LWS_GROUP_SIZE} \
+            --data-parallel-address ${LWS_LEADER_ADDRESS} \
             --data-parallel-rpc-port 5555 \
-            --data-parallel-rank $(LWS_WORKER_INDEX) \
+            --data-parallel-rank ${LWS_WORKER_INDEX} \
             --trust-remote-code \
+            --enforce-eager \
             --kv_transfer_config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
       env:
         - name: UCX_TLS
@@ -163,6 +164,8 @@ decode:
             fieldRef:
               fieldPath: status.podIP
       securityContext:
+        runAsUser: 0
+        runAsGroup: 0
         privileged: true
         capabilities:
           add:
@@ -181,6 +184,14 @@ decode:
           nvidia.com/gpu: "1"
           rdma/ib: 1
       mountModelVolume: false
+      volumeMounts:
+        - name: hf-cache
+          mountPath: /huggingface-cache
+  volumes:
+    - name: hf-cache
+      hostPath:
+        path: /mnt/local/hf-cache
+        type: DirectoryOrCreate
 
 prefill:
   subGroupPolicy:
@@ -196,7 +207,7 @@ prefill:
     tensor: 1 # these will be derived based performance testing
   containers:
     - name: vllm-worker-prefill
-      image: "quay.io/tms/llm-d-cks:0.2.0-beta0"
+      image: "quay.io/wseaton/vllm:llmd-multistage-4"
       imagePullPolicy: Always
       workingDir: /code
       command: ["/bin/bash","-c"]
@@ -249,12 +260,13 @@ prefill:
           #################
           export CUDA_VISIBLE_DEVICES=${ALLOCATED_GPU_INDICES}
 
-          # vllm serve \
+          # Prefill worker
           source /opt/vllm/bin/activate
           exec vllm serve \
-            Qwen/Qwen3-30B-A3B-FP8 \
-            --port 8200 \
+            deepseek-ai/DeepSeek-R1-0528 \
+            --port 8000 \
             --disable-log-requests \
+            --disable-uvicorn-access-log \
             --enable-expert-parallel \
             --tensor-parallel-size $TP_SIZE \
             --data-parallel-size ${LWS_GROUP_SIZE} \
@@ -262,6 +274,7 @@ prefill:
             --data-parallel-rpc-port 5555 \
             --data-parallel-rank ${LWS_WORKER_INDEX} \
             --trust-remote-code \
+            --enforce-eager \
             --kv_transfer_config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
       env:
         - name: UCX_TLS
@@ -312,6 +325,8 @@ prefill:
             fieldRef:
               fieldPath: status.podIP
       securityContext:
+        runAsUser: 0
+        runAsGroup: 0
         privileged: true
         capabilities:
           add:
@@ -330,3 +345,11 @@ prefill:
           nvidia.com/gpu: "1"
           rdma/ib: 1
       mountModelVolume: false
+      volumeMounts:
+        - name: hf-cache
+          mountPath: /huggingface-cache
+  volumes:
+    - name: hf-cache
+      hostPath:
+        path: /mnt/local/hf-cache
+        type: DirectoryOrCreate
