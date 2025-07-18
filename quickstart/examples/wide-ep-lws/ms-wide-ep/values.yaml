@@ -99,6 +99,8 @@ decode:
           #################
           export CUDA_VISIBLE_DEVICES=${ALLOCATED_GPU_INDICES}
 
+          export UCX_NET_DEVICES="ibp$(LWS_WORKER_INDEX % 8):1"
+
           # Decode worker
           source /opt/vllm/bin/activate
           exec vllm serve \
@@ -118,8 +120,6 @@ decode:
       env:
         - name: UCX_TLS
           value: "^cuda_ipc"
-        - name: UCX_NET_DEVICES
-          value: "^posix,^cma"
         - name: TRITON_LIBCUDA_PATH
           value: "/usr/lib64"
         - name: HF_HUB_DISABLE_XET
@@ -260,6 +260,8 @@ prefill:
           #################
           export CUDA_VISIBLE_DEVICES=${ALLOCATED_GPU_INDICES}
 
+          export UCX_NET_DEVICES="ibp$(LWS_WORKER_INDEX % 8):1"
+
           # Prefill worker
           source /opt/vllm/bin/activate
           exec vllm serve \
@@ -279,8 +281,6 @@ prefill:
       env:
         - name: UCX_TLS
           value: "^cuda_ipc"
-        - name: UCX_NET_DEVICES
-          value: "^posix,^cma"
         - name: TRITON_LIBCUDA_PATH
           value: "/usr/lib64"
         - name: HF_HUB_DISABLE_XET
@@ -294,7 +294,7 @@ prefill:
         - name: VLLM_USE_DEEP_GEMM
           value: "1"
         - name: VLLM_ALL2ALL_BACKEND
-          value: "deepep_high_throughput" # TEMP workaround to avoid issues with nvshmem
+          value: "deepep_high_throughput"
         - name: NVIDIA_GDRCOPY
           value: "enabled"
         - name: NVSHMEM_DEBUG
