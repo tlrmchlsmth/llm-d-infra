@@ -46,7 +46,7 @@ decode:
     tensor: 1 # these will be derived based performance testing
   containers:
     - name: vllm-worker-decode
-      image: "quay.io/wseaton/vllm:llmd-multistage-4"
+      image: "quay.io/wseaton/vllm:llmd-multistage-6"
       imagePullPolicy: Always
       workingDir: /code
       command: ["/bin/bash","-c"]
@@ -117,7 +117,7 @@ decode:
             --kv_transfer_config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
       env:
         - name: UCX_TLS
-          value: "all"
+          value: "^cuda_ipc"
         - name: UCX_NET_DEVICES
           value: "^posix,^cma"
         - name: TRITON_LIBCUDA_PATH
@@ -207,7 +207,7 @@ prefill:
     tensor: 1 # these will be derived based performance testing
   containers:
     - name: vllm-worker-prefill
-      image: "quay.io/wseaton/vllm:llmd-multistage-4"
+      image: "quay.io/wseaton/vllm:llmd-multistage-6"
       imagePullPolicy: Always
       workingDir: /code
       command: ["/bin/bash","-c"]
@@ -278,7 +278,7 @@ prefill:
             --kv_transfer_config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
       env:
         - name: UCX_TLS
-          value: "all"
+          value: "^cuda_ipc"
         - name: UCX_NET_DEVICES
           value: "^posix,^cma"
         - name: TRITON_LIBCUDA_PATH
@@ -297,8 +297,8 @@ prefill:
           value: "deepep_high_throughput" # TEMP workaround to avoid issues with nvshmem
         - name: NVIDIA_GDRCOPY
           value: "enabled"
-        # - name: NVSHMEM_DEBUG
-        #   value: "INFO"
+        - name: NVSHMEM_DEBUG
+          value: "INFO"
         - name: NVSHMEM_REMOTE_TRANSPORT
           value: "ibgda"
         - name: NVSHMEM_IB_ENABLE_IBGDA
