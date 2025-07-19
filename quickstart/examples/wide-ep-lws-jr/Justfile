@@ -1,6 +1,10 @@
 NAMESPACE := "tms-jr-d"
 KN := "kubectl -n tms-jr-d"
 
+get-pods-with-gpus:
+ kubectl get pods --all-namespaces \
+  -o jsonpath='{range .items[?(@.spec.containers[*].resources.requests.nvidia\.com/gpu)]}{.metadata.namespace}{"\t"}{.metadata.name}{"\n"}{end}'
+
 start:
   helmfile --selector managedBy=helmfile apply helmfile.yaml
 stop:
