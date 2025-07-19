@@ -1,6 +1,6 @@
-repositories:
-  - name: llm-d-modelservice
-    url: https://llm-d-incubation.github.io/llm-d-modelservice/
+# repositories:
+#   - name: llm-d-modelservice
+#     url: https://llm-d-incubation.github.io/llm-d-modelservice/
 
 releases:
   - name: infra-wide-ep
@@ -25,8 +25,9 @@ releases:
 
   - name: ms-wide-ep
     namespace: tms-d
-    chart: llm-d-modelservice/llm-d-modelservice
-    version: 0.0.17
+    # chart: llm-d-modelservice/llm-d-modelservice
+    # version: 0.0.17
+    chart: ../../../../llm-d-modelservice-charts/charts/llm-d-modelservice/
     installed: true
     needs:
       - tms-d/gaie-wide-ep

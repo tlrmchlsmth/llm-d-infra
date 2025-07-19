@@ -20,7 +20,9 @@ routing:
     connector: nixlv2
 
   inferenceModel:
-    create: false
+    criticality: Critical
+    create: true
+    # create: false
 
   inferencePool:
     create: false
@@ -46,7 +48,7 @@ decode:
     tensor: 1 # these will be derived based performance testing
   containers:
     - name: vllm-worker-decode
-      image: "quay.io/wseaton/vllm:llmd-multistage-6"
+      image: "docker.io/rgshaw2/vllm:nixl-logging-0.1"
       imagePullPolicy: Always
       workingDir: /code
       command: ["/bin/bash","-c"]
@@ -109,7 +111,6 @@ decode:
           exec vllm serve \
             deepseek-ai/DeepSeek-R1-0528 \
             --port 8200 \
-            --disable-log-requests \
             --disable-uvicorn-access-log \
             --enable-expert-parallel \
             --tensor-parallel-size $TP_SIZE \
@@ -213,7 +214,8 @@ prefill:
     tensor: 1 # these will be derived based performance testing
   containers:
     - name: vllm-worker-prefill
-      image: "quay.io/wseaton/vllm:llmd-multistage-6"
+      # image: "quay.io/wseaton/vllm:llmd-multistage-6"
+      image: "docker.io/rgshaw2/vllm:nixl-logging-0.1"
       imagePullPolicy: Always
       workingDir: /code
       command: ["/bin/bash","-c"]
@@ -276,7 +278,6 @@ prefill:
           exec vllm serve \
             deepseek-ai/DeepSeek-R1-0528 \
             --port 8000 \
-            --disable-log-requests \
             --disable-uvicorn-access-log \
             --enable-expert-parallel \
             --tensor-parallel-size $TP_SIZE \
