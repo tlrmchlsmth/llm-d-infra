@@ -32,40 +32,41 @@ routing:
 
   epp:
     create: true
-    image: quay.io/vmaroon/llm-d-inference-scheduler:cache-tracking
+    image: quay.io/grpereir/llm-d-inference-scheduler:v0.5.0-rc.3
     debugLevel: 4
+    pluginsConfigFile: "dp-config.yaml"
     pluginsCustomConfig:
-    dp-config.yaml: |
-      # ALWAYS DO PD IN THIS EXAMPLE (THRESHOLD 0)
-      apiVersion: inference.networking.x-k8s.io/v1alpha1
-      kind: EndpointPickerConfig
-      plugins:
-      - type: prefill-header-handler
-      - type: prefix-cache-scorer
-        parameters:
-          hashBlockSize: 5
-          maxPrefixBlocksToMatch: 256
-          lruCapacityPerServer: 31250
-      - type: prefill-filter
-      - type: decode-filter
-      - type: max-score-picker
-      - type: pd-profile-handler
-        parameters:
-          threshold: 0
-          hashBlockSize: 5
-      schedulingProfiles:
-      - name: prefill
+      dp-config.yaml: |
+        # ALWAYS DO PD IN THIS EXAMPLE (THRESHOLD 0)
+        apiVersion: inference.networking.x-k8s.io/v1alpha1
+        kind: EndpointPickerConfig
         plugins:
-        - pluginRef: prefill-filter
-        - pluginRef: max-score-picker
-        - pluginRef: prefix-cache-scorer
-          weight: 50
-      - name: decode
-        plugins:
-        - pluginRef: decode-filter
-        - pluginRef: max-score-picker
-        - pluginRef: prefix-cache-scorer
-          weight: 50
+        - type: prefill-header-handler
+        - type: prefix-cache-scorer
+          parameters:
+            hashBlockSize: 5
+            maxPrefixBlocksToMatch: 256
+            lruCapacityPerServer: 31250
+        - type: prefill-filter
+        - type: decode-filter
+        - type: max-score-picker
+        - type: pd-profile-handler
+          parameters:
+            threshold: 0
+            hashBlockSize: 5
+        schedulingProfiles:
+        - name: prefill
+          plugins:
+          - pluginRef: prefill-filter
+          - pluginRef: max-score-picker
+          - pluginRef: prefix-cache-scorer
+            weight: 50
+        - name: decode
+          plugins:
+          - pluginRef: decode-filter
+          - pluginRef: max-score-picker
+          - pluginRef: prefix-cache-scorer
+            weight: 50
 
 decode:
   subGroupPolicy:
