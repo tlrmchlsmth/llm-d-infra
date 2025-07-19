@@ -92,16 +92,19 @@ decode:
             fi
           done
 
-
-          echo "Using GPU Device ID: $ALLOCATED_GPU_INDICES"
-          #################
-          # RUN vLLM
-          #################
           export CUDA_VISIBLE_DEVICES=${ALLOCATED_GPU_INDICES}
+          echo "Using CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
 
-          export UCX_NET_DEVICES="ibp$(LWS_WORKER_INDEX % 8):1"
+          declare -a UCX_ACC_DEVICES=()
+          for idx in "${ALLOCATED_GPU_INDICES[@]}"; do
+              UCX_ACC_DEVICES+=("gpu$idx")
+          done
+          echo "Using UCX_ACC_DEVICES=$UCX_ACC_DEVICES"
 
-          # Decode worker
+
+          #################
+          # RUN vLLM decode worker
+          #################
           source /opt/vllm/bin/activate
           exec vllm serve \
             deepseek-ai/DeepSeek-R1-0528 \
@@ -117,9 +120,12 @@ decode:
             --trust-remote-code \
             --enforce-eager \
             --kv_transfer_config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
+
       env:
         - name: UCX_TLS
-          value: "^cuda_ipc"
+          value: "rc,ud,sm,cuda_copy,cuda_ipc"
+        - name: UCX_PROTO_INFO
+          value: "y"
         - name: TRITON_LIBCUDA_PATH
           value: "/usr/lib64"
         - name: HF_HUB_DISABLE_XET
@@ -133,7 +139,7 @@ decode:
         - name: VLLM_USE_DEEP_GEMM
           value: "1"
         - name: VLLM_ALL2ALL_BACKEND
-          value: "deepep_low_latency" # TEMP workaround to avoid issues with nvshmem
+          value: "deepep_low_latency"
         - name: NVIDIA_GDRCOPY
           value: "enabled"
         - name: NVSHMEM_DEBUG
@@ -253,16 +259,19 @@ prefill:
             fi
           done
 
-
-          echo "Using GPU Device ID: $ALLOCATED_GPU_INDICES"
-          #################
-          # RUN vLLM
-          #################
           export CUDA_VISIBLE_DEVICES=${ALLOCATED_GPU_INDICES}
+          echo "Using CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
 
-          export UCX_NET_DEVICES="ibp$(LWS_WORKER_INDEX % 8):1"
+          declare -a UCX_ACC_DEVICES=()
+          for idx in "${ALLOCATED_GPU_INDICES[@]}"; do
+              UCX_ACC_DEVICES+=("gpu$idx")
+          done
+          echo "Using UCX_ACC_DEVICES=$UCX_ACC_DEVICES"
 
-          # Prefill worker
+
+          #################
+          # RUN vLLM prefill worker
+          #################
           source /opt/vllm/bin/activate
           exec vllm serve \
             deepseek-ai/DeepSeek-R1-0528 \
@@ -278,9 +287,12 @@ prefill:
             --trust-remote-code \
             --enforce-eager \
             --kv_transfer_config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
+
       env:
         - name: UCX_TLS
-          value: "^cuda_ipc"
+          value: "rc,ud,sm,cuda_copy,cuda_ipc"
+        - name: UCX_PROTO_INFO
+          value: "y"
         - name: TRITON_LIBCUDA_PATH
           value: "/usr/lib64"
         - name: HF_HUB_DISABLE_XET
