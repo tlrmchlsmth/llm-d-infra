@@ -5,7 +5,7 @@ MODEL := "deepseek-ai/DeepSeek-R1-0528"
 
 eval:
     lm_eval --model local-completions --tasks gsm8k \
-    --model_args model={{MODEL}},base_url={{BASE_URL}}/v1/completions,num_concurrent=50,max_retries=3,tokenized_requests=False \
+    --model_args model={{MODEL}},base_url={{BASE_URL}}/v1/completions,num_concurrent=50,max_retries=0,tokenized_requests=False \
     --limit 100
 
 benchmark RR NUM_REQUESTS INPUT_LEN OUTPUT_LEN:
