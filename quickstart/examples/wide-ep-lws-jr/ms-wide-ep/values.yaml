@@ -32,7 +32,7 @@ routing:
 
   epp:
     create: true
-    image: quay.io/grpereir/llm-d-inference-scheduler:v0.5.0-rc.3
+    image: quay.io/grpereir/llm-d-inference-scheduler:v0.5.0-rc.4
     debugLevel: 4
     pluginsConfigFile: "dp-config.yaml"
     pluginsCustomConfig:
@@ -42,14 +42,9 @@ routing:
         kind: EndpointPickerConfig
         plugins:
         - type: prefill-header-handler
-        - type: prefix-cache-scorer
-          parameters:
-            hashBlockSize: 5
-            maxPrefixBlocksToMatch: 256
-            lruCapacityPerServer: 31250
         - type: prefill-filter
         - type: decode-filter
-        - type: max-score-picker
+        - type: random-picker
         - type: pd-profile-handler
           parameters:
             threshold: 0
@@ -58,15 +53,11 @@ routing:
         - name: prefill
           plugins:
           - pluginRef: prefill-filter
-          - pluginRef: max-score-picker
-          - pluginRef: prefix-cache-scorer
-            weight: 50
+          - pluginRef: random-picker
         - name: decode
           plugins:
           - pluginRef: decode-filter
-          - pluginRef: max-score-picker
-          - pluginRef: prefix-cache-scorer
-            weight: 50
+          - pluginRef: random-picker
 
 decode:
   subGroupPolicy:
@@ -82,7 +73,7 @@ decode:
     tensor: 1 # these will be derived based performance testing
   containers:
     - name: vllm-worker-decode
-      image: "quay.io/wseaton/vllm:llmd-multistage-6"
+      image: "docker.io/rgshaw2/vllm:nixl-logging-0.1"
       imagePullPolicy: Always
       workingDir: /code
       command: ["/bin/bash","-c"]
@@ -251,7 +242,7 @@ prefill:
     tensor: 1 # these will be derived based performance testing
   containers:
     - name: vllm-worker-prefill
-      image: "quay.io/wseaton/vllm:llmd-multistage-6"
+      image: "docker.io/rgshaw2/vllm:nixl-logging-0.1"
       imagePullPolicy: Always
       workingDir: /code
       command: ["/bin/bash","-c"]
