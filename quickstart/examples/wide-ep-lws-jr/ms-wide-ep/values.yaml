@@ -85,12 +85,12 @@ decode:
 
           source /opt/vllm/bin/activate
           exec vllm serve \
-            __MODEL__ \
+            deepseek-ai/DeepSeek-R1-0528 \
             --port 8080 \
             --disable-log-requests \
             --enable-expert-parallel \
             --tensor-parallel-size $TP_SIZE \
-            --data-parallel-size $(LWS_GROUP_SIZE * DP_SIZE_LOCAL) \
+            --data-parallel-size $((LWS_GROUP_SIZE * DP_SIZE_LOCAL)) \
             --data-parallel-size-local $DP_SIZE_LOCAL \
             --data-parallel-address ${LWS_LEADER_ADDRESS} \
             --data-parallel-rpc-port 5555 \
@@ -101,8 +101,6 @@ decode:
             --kv_transfer_config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
 
       env:
-        - name: TP_SIZE
-          value: "1"
         - name: DP_SIZE_LOCAL
           value: "8"
         - name: UCX_TLS
@@ -143,11 +141,11 @@ decode:
           value: "DEBUG"
         - name: HF_HUB_CACHE
           value: /huggingface-cache
-        # - name: HF_TOKEN
-        #   valueFrom:
-        #     secretKeyRef:
-        #       name: llm-d-hf-token
-        #       key: HF_TOKEN
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: llm-d-hf-token
+              key: HF_TOKEN
         - name: VLLM_NIXL_SIDE_CHANNEL_HOST
           valueFrom:
             fieldRef:
@@ -208,12 +206,12 @@ prefill:
 
           source /opt/vllm/bin/activate
           exec vllm serve \
-            __MODEL__ \
+            deepseek-ai/DeepSeek-R1-0528 \
             --port 8080 \
             --disable-log-requests \
             --enable-expert-parallel \
             --tensor-parallel-size $TP_SIZE \
-            --data-parallel-size $(LWS_GROUP_SIZE * DP_SIZE_LOCAL) \
+            --data-parallel-size $((LWS_GROUP_SIZE * DP_SIZE_LOCAL)) \
             --data-parallel-size-local $DP_SIZE_LOCAL \
             --data-parallel-address ${LWS_LEADER_ADDRESS} \
             --data-parallel-rpc-port 5555 \
@@ -224,8 +222,6 @@ prefill:
             --kv_transfer_config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
 
       env:
-        - name: TP_SIZE
-          value: "1"
         - name: DP_SIZE_LOCAL
           value: "8"
         - name: UCX_TLS
@@ -266,11 +262,11 @@ prefill:
           value: "DEBUG"
         - name: HF_HUB_CACHE
           value: /huggingface-cache
-        # - name: HF_TOKEN
-        #   valueFrom:
-        #     secretKeyRef:
-        #       name: llm-d-hf-token
-        #       key: HF_TOKEN
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: llm-d-hf-token
+              key: HF_TOKEN
         - name: VLLM_NIXL_SIDE_CHANNEL_HOST
           valueFrom:
             fieldRef:

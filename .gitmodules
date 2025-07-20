@@ -1,0 +1,3 @@
+[submodule "quickstart/examples/wide-ep-lws-jr/llm-d-modelservice"]
+	path = quickstart/examples/wide-ep-lws-jr/llm-d-modelservice
+	url = https://github.com/tlrmchlsmth/llm-d-modelservice
