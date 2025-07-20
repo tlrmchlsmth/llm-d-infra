@@ -67,7 +67,7 @@ decode:
     labelValues:
       - H200
   parallelism:
-    data: 8 # these will be derived based performance testing
+    data: 1 # TODO: hack
     tensor: 1 # these will be derived based performance testing
   containers:
     - name: vllm-worker-decode
@@ -190,7 +190,7 @@ prefill:
     labelValues:
       - H200
   parallelism:
-    data: 8 # these will be derived based performance testing
+    data: 1 # TODO: hack
     tensor: 1 # these will be derived based performance testing
   containers:
     - name: vllm-worker-prefill
