@@ -2,7 +2,7 @@ NAMESPACE := "tms-d"
 KN := "kubectl -n tms-d"
 
 stop:
-  helmfile --selector managedBy=helmfile apply helmfile.yaml
+  helmfile --selector managedBy=helmfile destroy
 
 restart:
   helmfile --selector managedBy=helmfile destroy \

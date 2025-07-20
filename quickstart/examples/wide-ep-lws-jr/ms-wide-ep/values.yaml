@@ -73,7 +73,7 @@ decode:
     tensor: 1 # these will be derived based performance testing
   containers:
     - name: vllm-worker-decode
-      image: "docker.io/rgshaw2/vllm:nixl-logging-0.1"
+      image: "quay.io/tms/llm-d-dev:0.2.0-a"
       imagePullPolicy: Always
       workingDir: /code
       command: ["/bin/bash","-c"]
@@ -123,13 +123,26 @@ decode:
           echo "Using CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
 
           declare -a UCX_ACC_DEVICES=()
+          declare -a UCX_NET_DEVICES=()
           for idx in "${ALLOCATED_GPU_INDICES[@]}"; do
               UCX_ACC_DEVICES+=("gpu$idx")
-              UCX_NET_DEVICES+=("ibp$idx")
+              UCX_NET_DEVICES+=("ibp$idx:1")
           done
           echo "Using UCX_ACC_DEVICES=$UCX_ACC_DEVICES"
-          echo "Using UCX_NET_DEVICES=$UCX_NET_DEVICES"
+          export UCX_ACC_DEVICES=${UCX_ACC_DEVICES}
+          export UCX_NET_DEVICES=${UCX_NET_DEVICES}
 
+          #################
+          # Hide mlx5 devices
+          #################
+          #mkdir -p /host_ib
+          #mount --bind /sys/class/infiniband /host_ib
+          #mkdir -p /tmp/masked_ib
+          #mount -t tmpfs tmpfs /tmp/masked_ib
+          #for d in /host_ib/ibp*; do
+          #    ln -s "$d" /tmp/masked_ib/$(basename "$d")
+          #done
+          #mount --bind /tmp/masked_ib /sys/class/infiniband
 
           #################
           # RUN vLLM decode worker
@@ -152,9 +165,11 @@ decode:
 
       env:
         - name: UCX_TLS
-          value: "rc,ud,sm,cuda_copy,cuda_ipc"
+          value: "rc,sm,self"
         - name: UCX_PROTO_INFO
           value: "y"
+        - name: UCX_LOG_LEVEL
+          value: "debug"
         - name: TRITON_LIBCUDA_PATH
           value: "/usr/lib64"
         - name: HF_HUB_DISABLE_XET
@@ -168,7 +183,8 @@ decode:
         - name: VLLM_USE_DEEP_GEMM
           value: "1"
         - name: VLLM_ALL2ALL_BACKEND
-          value: "deepep_low_latency"
+          #value: "deepep_low_latency"
+          value: "deepep_high_throughput"
         - name: NVIDIA_GDRCOPY
           value: "enabled"
         - name: NVSHMEM_DEBUG
@@ -222,6 +238,7 @@ decode:
       volumeMounts:
         - name: hf-cache
           mountPath: /huggingface-cache
+
   volumes:
     - name: hf-cache
       hostPath:
@@ -242,7 +259,7 @@ prefill:
     tensor: 1 # these will be derived based performance testing
   containers:
     - name: vllm-worker-prefill
-      image: "docker.io/rgshaw2/vllm:nixl-logging-0.1"
+      image: "quay.io/tms/llm-d-dev:0.2.0-a"
       imagePullPolicy: Always
       workingDir: /code
       command: ["/bin/bash","-c"]
@@ -292,12 +309,26 @@ prefill:
           echo "Using CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
 
           declare -a UCX_ACC_DEVICES=()
+          declare -a UCX_NET_DEVICES=()
           for idx in "${ALLOCATED_GPU_INDICES[@]}"; do
               UCX_ACC_DEVICES+=("gpu$idx")
-              UCX_NET_DEVICES+=("ibp$idx")
+              UCX_NET_DEVICES+=("ibp$idx:1")
           done
           echo "Using UCX_ACC_DEVICES=$UCX_ACC_DEVICES"
-          echo "Using UCX_NET_DEVICES=$UCX_NET_DEVICES"
+          export UCX_ACC_DEVICES=${UCX_ACC_DEVICES}
+          export UCX_NET_DEVICES=${UCX_NET_DEVICES}
+
+          #################
+          # Hide mlx5 devices
+          #################
+          #mkdir -p /host_ib
+          #mount --bind /sys/class/infiniband /host_ib
+          #mkdir -p /tmp/masked_ib
+          #mount -t tmpfs tmpfs /tmp/masked_ib
+          #for d in /host_ib/ibp*; do
+          #    ln -s "$d" /tmp/masked_ib/$(basename "$d")
+          #done
+          #mount --bind /tmp/masked_ib /sys/class/infiniband
 
 
           #################
@@ -321,9 +352,11 @@ prefill:
 
       env:
         - name: UCX_TLS
-          value: "rc,ud,sm,cuda_copy,cuda_ipc"
+          value: "rc,sm,self"
         - name: UCX_PROTO_INFO
           value: "y"
+        - name: UCX_LOG_LEVEL
+          value: "debug"
         - name: TRITON_LIBCUDA_PATH
           value: "/usr/lib64"
         - name: HF_HUB_DISABLE_XET
@@ -391,6 +424,7 @@ prefill:
       volumeMounts:
         - name: hf-cache
           mountPath: /huggingface-cache
+
   volumes:
     - name: hf-cache
       hostPath:
