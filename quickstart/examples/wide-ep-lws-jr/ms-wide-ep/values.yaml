@@ -67,7 +67,7 @@ decode:
     labelValues:
       - H200
   parallelism:
-    data: 1 # TODO: hack
+    data: 2 # TODO: hack
     tensor: 1 # these will be derived based performance testing
   containers:
     - name: vllm-worker-decode
@@ -86,16 +86,16 @@ decode:
           source /opt/vllm/bin/activate
           exec vllm serve \
             deepseek-ai/DeepSeek-R1-0528 \
-            --port 8080 \
+            --port 8200 \
             --disable-log-requests \
+            --disable-uvicorn-access-log \
             --enable-expert-parallel \
             --tensor-parallel-size $TP_SIZE \
             --data-parallel-size $((LWS_GROUP_SIZE * DP_SIZE_LOCAL)) \
             --data-parallel-size-local $DP_SIZE_LOCAL \
             --data-parallel-address ${LWS_LEADER_ADDRESS} \
             --data-parallel-rpc-port 5555 \
-            --data-parallel-start-rank $START_RANK \
-            --api-server-count 8 \
+            --data-parallel-rank $START_RANK \
             --trust-remote-code \
             --enforce-eager \
             --kv_transfer_config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
@@ -103,12 +103,10 @@ decode:
       env:
         - name: DP_SIZE_LOCAL
           value: "8"
-        - name: UCX_TLS
-          value: "rc,sm,self"
+        #- name: UCX_TLS
+        #  value: "rc,sm,self"
         - name: UCX_PROTO_INFO
           value: "y"
-        - name: UCX_LOG_LEVEL
-          value: "debug"
         - name: TRITON_LIBCUDA_PATH
           value: "/usr/lib64"
         - name: HF_HUB_DISABLE_XET
@@ -137,8 +135,8 @@ decode:
           value: "eth0"
         - name: NCCL_IB_HCA
           value: "ibp"
-        - name: VLLM_LOGGING_LEVEL
-          value: "DEBUG"
+        #- name: VLLM_LOGGING_LEVEL
+        #  value: "DEBUG"
         - name: HF_HUB_CACHE
           value: /huggingface-cache
         - name: VLLM_NIXL_SIDE_CHANNEL_HOST
@@ -208,16 +206,16 @@ prefill:
           source /opt/vllm/bin/activate
           exec vllm serve \
             deepseek-ai/DeepSeek-R1-0528 \
-            --port 8080 \
+            --port 8000 \
             --disable-log-requests \
+            --disable-uvicorn-access-log \
             --enable-expert-parallel \
             --tensor-parallel-size $TP_SIZE \
             --data-parallel-size $((LWS_GROUP_SIZE * DP_SIZE_LOCAL)) \
             --data-parallel-size-local $DP_SIZE_LOCAL \
             --data-parallel-address ${LWS_LEADER_ADDRESS} \
             --data-parallel-rpc-port 5555 \
-            --data-parallel-start-rank $START_RANK \
-            --api-server-count 8 \
+            --data-parallel-rank $START_RANK \
             --trust-remote-code \
             --enforce-eager \
             --kv_transfer_config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
@@ -225,12 +223,10 @@ prefill:
       env:
         - name: DP_SIZE_LOCAL
           value: "8"
-        - name: UCX_TLS
-          value: "rc,sm,self"
+        #- name: UCX_TLS
+        #  value: "rc,sm,self"
         - name: UCX_PROTO_INFO
           value: "y"
-        - name: UCX_LOG_LEVEL
-          value: "debug"
         - name: TRITON_LIBCUDA_PATH
           value: "/usr/lib64"
         - name: HF_HUB_DISABLE_XET
@@ -259,8 +255,8 @@ prefill:
           value: "eth0"
         - name: NCCL_IB_HCA
           value: "ibp"
-        - name: VLLM_LOGGING_LEVEL
-          value: "DEBUG"
+        #- name: VLLM_LOGGING_LEVEL
+        #  value: "DEBUG"
         - name: HF_HUB_CACHE
           value: /huggingface-cache
         - name: VLLM_NIXL_SIDE_CHANNEL_HOST

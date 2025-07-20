@@ -30,3 +30,15 @@ releases:
       - ms-wide-ep/values.yaml
     labels:
       managedBy: helmfile
+
+    hooks:
+    - events: [ "postsync" ]
+      command: bash
+      args:
+        - -c
+        - |
+          echo "Patching HTTPRoute to trigger reconciliation..."
+          kubectl patch httproute ms-wide-ep-llm-d-modelservice \
+            -n tms-jr-d \
+            -p '{"metadata":{"labels":{"inferencepool":"ms-wide-ep-llm-d-modelservice"}}}' \
+            --type=merge
