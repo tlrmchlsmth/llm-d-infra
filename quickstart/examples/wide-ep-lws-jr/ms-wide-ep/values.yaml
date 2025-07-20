@@ -60,8 +60,6 @@ routing:
           - pluginRef: random-picker
 
 decode:
-  subGroupPolicy:
-    subGroupSize: 8
   create: true
   replicas: 1
   acceleratorTypes:
@@ -73,97 +71,40 @@ decode:
     tensor: 1 # these will be derived based performance testing
   containers:
     - name: vllm-worker-decode
-      image: "quay.io/tms/llm-d-dev:0.2.0-a"
+      image: "quay.io/tms/llm-d-dev:0.2.0-oppn"
       imagePullPolicy: Always
       workingDir: /code
       command: ["/bin/bash","-c"]
       modelCommand: "custom"
       args:
         - |
-          ###################################################
-          # Figure out which GPU to use when 'privileged: true'.
-          # NVIDIA_VISIBLE_DEVICES tells us which GPU UUIDs to use, but
-          # vLLM requires that CPU_VISIBLE_DEVICES is set to device ordinals.
-          # This remaps the GPU UUIDs to indices.
-
-          # --- 1. Collect the UUIDs that the container has access to -------------------
-          mapfile -t ALLOCATED_GPU_UUIDS < <(ls -1 "$NVIDIA_VISIBLE_DEVICES" | sort)
-
-          echo "Allocated GPU UUIDs (${#ALLOCATED_GPU_UUIDS[@]} found):"
-          printf '  • %s\n' "${ALLOCATED_GPU_UUIDS[@]}"
-
-          # --- 2. Build a map of UUID → index from nvidia‑smi --------------------------
-          GPU_MAP_DATA="$(nvidia-smi --query-gpu=uuid,index --format=csv,noheader)"
-          echo "nvidia-smi uuid,index pairs:"
-          echo "$GPU_MAP_DATA"
-
-          declare -a ALLOCATED_GPU_INDICES=()
-
-          for uuid in "${ALLOCATED_GPU_UUIDS[@]}"; do
-            idx="$(
-              printf '%s\n' "$GPU_MAP_DATA" |
-              awk -F',' -v target_uuid="$uuid" '
-                {
-                  gsub(/^[ \t]+|[ \t]+$/, "", $1)   # trim spaces in $1 (uuid)
-                  if ($1 == target_uuid) {
-                    gsub(/^[ \t]+|[ \t]+$/, "", $2) # trim spaces in $2 (index)
-                    print $2
-                    exit
-                  }
-                }'
-            )"
-            if [ -n "$idx" ]; then
-              ALLOCATED_GPU_INDICES+=("$idx")
-            else
-              echo "⚠️  Warning: UUID $uuid not found in nvidia‑smi output" >&2
-            fi
-          done
-
-          export CUDA_VISIBLE_DEVICES=${ALLOCATED_GPU_INDICES}
-          echo "Using CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
-
-          declare -a UCX_ACC_DEVICES=()
-          declare -a UCX_NET_DEVICES=()
-          for idx in "${ALLOCATED_GPU_INDICES[@]}"; do
-              UCX_ACC_DEVICES+=("gpu$idx")
-              UCX_NET_DEVICES+=("ibp$idx:1")
-          done
-          echo "Using UCX_ACC_DEVICES=$UCX_ACC_DEVICES"
-          export UCX_ACC_DEVICES=${UCX_ACC_DEVICES}
-          export UCX_NET_DEVICES=${UCX_NET_DEVICES}
-
-          #################
-          # Hide mlx5 devices
-          #################
-          #mkdir -p /host_ib
-          #mount --bind /sys/class/infiniband /host_ib
-          #mkdir -p /tmp/masked_ib
-          #mount -t tmpfs tmpfs /tmp/masked_ib
-          #for d in /host_ib/ibp*; do
-          #    ln -s "$d" /tmp/masked_ib/$(basename "$d")
-          #done
-          #mount --bind /tmp/masked_ib /sys/class/infiniband
-
           #################
           # RUN vLLM decode worker
           #################
+          START_RANK=$(( ${LWS_WORKER_INDEX:-0} * DP_SIZE_LOCAL ))
+
           source /opt/vllm/bin/activate
           exec vllm serve \
-            deepseek-ai/DeepSeek-R1-0528 \
-            --port 8200 \
+            __MODEL__ \
+            --port 8080 \
             --disable-log-requests \
-            --disable-uvicorn-access-log \
             --enable-expert-parallel \
             --tensor-parallel-size $TP_SIZE \
-            --data-parallel-size ${LWS_GROUP_SIZE} \
+            --data-parallel-size $(LWS_GROUP_SIZE * DP_SIZE_LOCAL) \
+            --data-parallel-size-local $DP_SIZE_LOCAL \
             --data-parallel-address ${LWS_LEADER_ADDRESS} \
             --data-parallel-rpc-port 5555 \
-            --data-parallel-rank ${LWS_WORKER_INDEX} \
+            --data-parallel-start-rank $START_RANK \
+            --api-server-count 8 \
             --trust-remote-code \
             --enforce-eager \
             --kv_transfer_config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
 
       env:
+        - name: TP_SIZE
+          value: "1"
+        - name: DP_SIZE_LOCAL
+          value: "8"
         - name: UCX_TLS
           value: "rc,sm,self"
         - name: UCX_PROTO_INFO
@@ -178,13 +119,10 @@ decode:
           value: "1"
         - name: VLLM_RANDOMIZE_DP_DUMMY_INPUTS
           value: "1"
-        # - name: TP_SIZE
-        #   value: "1"
         - name: VLLM_USE_DEEP_GEMM
           value: "1"
         - name: VLLM_ALL2ALL_BACKEND
-          #value: "deepep_low_latency"
-          value: "deepep_high_throughput"
+          value: "deepep_low_latency"
         - name: NVIDIA_GDRCOPY
           value: "enabled"
         - name: NVSHMEM_DEBUG
@@ -217,22 +155,21 @@ decode:
       securityContext:
         runAsUser: 0
         runAsGroup: 0
-        privileged: true
         capabilities:
           add:
           - "IPC_LOCK"
           - "SYS_RAWIO"
       resources:
         limits:
-          memory: 128Gi
+          memory: 512Gi
           ephemeral-storage: 64Gi
-          nvidia.com/gpu: "1"
+          nvidia.com/gpu: "8"
           rdma/ib: 1
         requests:
-          cpu: 8
-          memory: 128Gi
+          cpu: 32
+          memory: 512Gi
           ephemeral-storage: 64Gi
-          nvidia.com/gpu: "1"
+          nvidia.com/gpu: "8"
           rdma/ib: 1
       mountModelVolume: false
       volumeMounts:
@@ -246,8 +183,6 @@ decode:
         type: DirectoryOrCreate
 
 prefill:
-  subGroupPolicy:
-    subGroupSize: 8
   create: true
   replicas: 1
   acceleratorTypes:
@@ -259,98 +194,40 @@ prefill:
     tensor: 1 # these will be derived based performance testing
   containers:
     - name: vllm-worker-prefill
-      image: "quay.io/tms/llm-d-dev:0.2.0-a"
+      image: "quay.io/tms/llm-d-dev:0.2.0-oppn"
       imagePullPolicy: Always
       workingDir: /code
       command: ["/bin/bash","-c"]
       modelCommand: "custom"
       args:
         - |
-          ###################################################
-          # Figure out which GPU to use when 'privileged: true'.
-          # NVIDIA_VISIBLE_DEVICES tells us which GPU UUIDs to use, but
-          # vLLM requires that CPU_VISIBLE_DEVICES is set to device ordinals.
-          # This remaps the GPU UUIDs to indices.
-
-          # --- 1. Collect the UUIDs that the container has access to -------------------
-          mapfile -t ALLOCATED_GPU_UUIDS < <(ls -1 "$NVIDIA_VISIBLE_DEVICES" | sort)
-
-          echo "Allocated GPU UUIDs (${#ALLOCATED_GPU_UUIDS[@]} found):"
-          printf '  • %s\n' "${ALLOCATED_GPU_UUIDS[@]}"
-
-          # --- 2. Build a map of UUID → index from nvidia‑smi --------------------------
-          GPU_MAP_DATA="$(nvidia-smi --query-gpu=uuid,index --format=csv,noheader)"
-          echo "nvidia-smi uuid,index pairs:"
-          echo "$GPU_MAP_DATA"
-
-          declare -a ALLOCATED_GPU_INDICES=()
-
-          for uuid in "${ALLOCATED_GPU_UUIDS[@]}"; do
-            idx="$(
-              printf '%s\n' "$GPU_MAP_DATA" |
-              awk -F',' -v target_uuid="$uuid" '
-                {
-                  gsub(/^[ \t]+|[ \t]+$/, "", $1)   # trim spaces in $1 (uuid)
-                  if ($1 == target_uuid) {
-                    gsub(/^[ \t]+|[ \t]+$/, "", $2) # trim spaces in $2 (index)
-                    print $2
-                    exit
-                  }
-                }'
-            )"
-            if [ -n "$idx" ]; then
-              ALLOCATED_GPU_INDICES+=("$idx")
-            else
-              echo "⚠️  Warning: UUID $uuid not found in nvidia‑smi output" >&2
-            fi
-          done
-
-          export CUDA_VISIBLE_DEVICES=${ALLOCATED_GPU_INDICES}
-          echo "Using CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
-
-          declare -a UCX_ACC_DEVICES=()
-          declare -a UCX_NET_DEVICES=()
-          for idx in "${ALLOCATED_GPU_INDICES[@]}"; do
-              UCX_ACC_DEVICES+=("gpu$idx")
-              UCX_NET_DEVICES+=("ibp$idx:1")
-          done
-          echo "Using UCX_ACC_DEVICES=$UCX_ACC_DEVICES"
-          export UCX_ACC_DEVICES=${UCX_ACC_DEVICES}
-          export UCX_NET_DEVICES=${UCX_NET_DEVICES}
-
-          #################
-          # Hide mlx5 devices
-          #################
-          #mkdir -p /host_ib
-          #mount --bind /sys/class/infiniband /host_ib
-          #mkdir -p /tmp/masked_ib
-          #mount -t tmpfs tmpfs /tmp/masked_ib
-          #for d in /host_ib/ibp*; do
-          #    ln -s "$d" /tmp/masked_ib/$(basename "$d")
-          #done
-          #mount --bind /tmp/masked_ib /sys/class/infiniband
-
-
           #################
           # RUN vLLM prefill worker
           #################
+          START_RANK=$(( ${LWS_WORKER_INDEX:-0} * DP_SIZE_LOCAL ))
+
           source /opt/vllm/bin/activate
           exec vllm serve \
-            deepseek-ai/DeepSeek-R1-0528 \
-            --port 8000 \
+            __MODEL__ \
+            --port 8080 \
             --disable-log-requests \
-            --disable-uvicorn-access-log \
             --enable-expert-parallel \
             --tensor-parallel-size $TP_SIZE \
-            --data-parallel-size ${LWS_GROUP_SIZE} \
+            --data-parallel-size $(LWS_GROUP_SIZE * DP_SIZE_LOCAL) \
+            --data-parallel-size-local $DP_SIZE_LOCAL \
             --data-parallel-address ${LWS_LEADER_ADDRESS} \
             --data-parallel-rpc-port 5555 \
-            --data-parallel-rank ${LWS_WORKER_INDEX} \
+            --data-parallel-start-rank $START_RANK \
+            --api-server-count 8 \
             --trust-remote-code \
             --enforce-eager \
             --kv_transfer_config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
 
       env:
+        - name: TP_SIZE
+          value: "1"
+        - name: DP_SIZE_LOCAL
+          value: "8"
         - name: UCX_TLS
           value: "rc,sm,self"
         - name: UCX_PROTO_INFO
@@ -365,8 +242,6 @@ prefill:
           value: "1"
         - name: VLLM_RANDOMIZE_DP_DUMMY_INPUTS
           value: "1"
-        # - name: TP_SIZE
-        #   value: "1"
         - name: VLLM_USE_DEEP_GEMM
           value: "1"
         - name: VLLM_ALL2ALL_BACKEND
@@ -403,22 +278,21 @@ prefill:
       securityContext:
         runAsUser: 0
         runAsGroup: 0
-        privileged: true
         capabilities:
           add:
           - "IPC_LOCK"
           - "SYS_RAWIO"
       resources:
         limits:
-          memory: 128Gi
+          memory: 512Gi
           ephemeral-storage: 64Gi
-          nvidia.com/gpu: "1"
+          nvidia.com/gpu: "8"
           rdma/ib: 1
         requests:
-          cpu: 8
-          memory: 128Gi
+          cpu: 32
+          memory: 512Gi
           ephemeral-storage: 64Gi
-          nvidia.com/gpu: "1"
+          nvidia.com/gpu: "8"
           rdma/ib: 1
       mountModelVolume: false
       volumeMounts:
