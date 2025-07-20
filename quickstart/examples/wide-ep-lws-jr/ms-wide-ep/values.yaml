@@ -20,7 +20,7 @@ routing:
     connector: nixlv2
 
   inferenceModel:
-    # criticality: Critical
+    criticality: Critical
     create: true
 
   inferencePool:
@@ -141,11 +141,6 @@ decode:
           value: "DEBUG"
         - name: HF_HUB_CACHE
           value: /huggingface-cache
-        - name: HF_TOKEN
-          valueFrom:
-            secretKeyRef:
-              name: llm-d-hf-token
-              key: HF_TOKEN
         - name: VLLM_NIXL_SIDE_CHANNEL_HOST
           valueFrom:
             fieldRef:
@@ -171,10 +166,16 @@ decode:
           rdma/ib: 1
       mountModelVolume: false
       volumeMounts:
+        - name: dshm
+          mountPath: /dev/shm
         - name: hf-cache
           mountPath: /huggingface-cache
 
   volumes:
+    - name: dshm
+      emptyDir:
+        medium: Memory
+        sizeLimit: 1Gi
     - name: hf-cache
       hostPath:
         path: /mnt/local/hf-cache
@@ -262,11 +263,6 @@ prefill:
           value: "DEBUG"
         - name: HF_HUB_CACHE
           value: /huggingface-cache
-        - name: HF_TOKEN
-          valueFrom:
-            secretKeyRef:
-              name: llm-d-hf-token
-              key: HF_TOKEN
         - name: VLLM_NIXL_SIDE_CHANNEL_HOST
           valueFrom:
             fieldRef:
@@ -292,10 +288,16 @@ prefill:
           rdma/ib: 1
       mountModelVolume: false
       volumeMounts:
+        - name: dshm
+          mountPath: /dev/shm
         - name: hf-cache
           mountPath: /huggingface-cache
 
   volumes:
+    - name: dshm
+      emptyDir:
+        medium: Memory
+        sizeLimit: 1Gi
     - name: hf-cache
       hostPath:
         path: /mnt/local/hf-cache
