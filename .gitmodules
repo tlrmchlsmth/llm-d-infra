@@ -1,0 +1,3 @@
+[submodule "quickstart/examples/wide-ep-lws/my_pods"]
+	path = quickstart/examples/wide-ep-lws/my_pods
+	url = https://github.com/tlrmchlsmth/my_pods
