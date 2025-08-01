@@ -14,11 +14,21 @@ benchmark MC NUM_REQUESTS INPUT_LEN OUTPUT_LEN:
         --dataset-name random \
         --random-input-len {{INPUT_LEN}} \
         --random-output-len {{OUTPUT_LEN}}  \
-        --request-rate 512 \
         --max-concurrency {{MC}} \
+        --request-rate 4096 \
         --seed $(date +%M%H%M%S) \
         --num-prompts {{NUM_REQUESTS}} \
         --ignore-eos
+
+benchmark_g MC NUM_REQUESTS INPUT_LEN OUTPUT_LEN:
+  GUIDELLM__REQUEST_TIMEOUT="900" \
+  GUIDELLM__MAX_CONCURRENCY="{{MC}}" \
+    guidellm benchmark \
+      --target {{BASE_URL}} \
+      --rate-type constant \
+      --rate 2048 \
+      --max-requests {{NUM_REQUESTS}} \
+      --data '{"prompt_tokens": {{INPUT_LEN}}, "output_tokens": {{OUTPUT_LEN}}}'
 
 # Simulates a pure decode workload, for measuring output token throughput and TTFT.
 # Designed to approximate the decode side of a P/D deployment in a steady state.

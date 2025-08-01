@@ -46,7 +46,8 @@ cp-results:
     results/$(cat ./.tmp/TIMESTAMP)
 
 start:
-   helmfile --selector managedBy=helmfile apply helmfile.yaml
+  helmfile --selector managedBy=helmfile apply helmfile.yaml
+
 stop:
    helmfile --selector managedBy=helmfile destroy
 restart:

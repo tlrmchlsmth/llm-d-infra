@@ -73,7 +73,7 @@ decode:
   parallelism:
     # TODO: The value for parallelism.data is a hack to get the pod-per-node case working.
     # This must equal the number of nodes rather than the dp_size.
-    data: 2
+    data: 4
     tensor: 1 # FIXME: This needs to be set to 1, otherwise we only see decode.parallelism.tensor GPUs
   containers:
     - name: vllm-worker-decode
@@ -116,13 +116,13 @@ decode:
             --num-redundant-experts 32 \
             --eplb-window-size 1000 \
             --eplb-step-interval 3000 \
+            --eplb-log-balancedness \
             --api-server-count=8 \
-            --enforce-eager \
             --kv_transfer_config '{"kv_connector":"NixlConnector","kv_role":"kv_both"}' \
 
       env:
         - name: VLLM_FUSED_MOE_CHUNK_SIZE
-          value: "2048"
+          value: "8192"
 
         - name: DP_SIZE_LOCAL
           value: "8"
@@ -268,7 +268,7 @@ prefill:
         - name: NVIDIA_GDRCOPY
           value: "enabled"
         - name: NVSHMEM_DEBUG
-          value: "DEBUG"
+          value: "INFO"
         - name: NVSHMEM_REMOTE_TRANSPORT
           value: "ibgda"
         - name: NVSHMEM_IB_ENABLE_IBGDA
