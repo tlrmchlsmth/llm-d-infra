@@ -18,15 +18,15 @@ create-secrets:
   && kubectl create secret generic gh-token-secret --from-literal=GH_TOKEN={{GH_TOKEN}} -n {{NAMESPACE}}
 
 start-bench:
-    {{KN}} apply -f my_pods/poker/values.yaml
+    {{KN}} apply -f benchmark-interactive-pod.yaml
   
 exec-bench:
   mkdir -p ./.tmp \
   && echo "MODEL := \"{{MODEL}}\"" > .tmp/Justfile.remote.tmp \
   && sed -e 's#__BASE_URL__#\"http://infra-wide-ep-inference-gateway-istio.llm-d-wide-ep.svc.cluster.local\"#g' Justfile.remote >> .tmp/Justfile.remote.tmp \
-  && kubectl cp .tmp/Justfile.remote.tmp {{NAMESPACE}}/poker:/app/Justfile \
-  && kubectl cp  ./run.sh {{NAMESPACE}}/poker:/app/run.sh \
-  && {{KN}} exec -it poker -- /bin/bash
+  && kubectl cp .tmp/Justfile.remote.tmp {{NAMESPACE}}/benchmark-interactive:/app/Justfile \
+  && kubectl cp  ./run.sh {{NAMESPACE}}/benchmark-interactive:/app/run.sh \
+  && {{KN}} exec -it benchmark-interactive -- /bin/bash
 
 run-bench NAME:
   mkdir -p ./.tmp \
@@ -34,15 +34,15 @@ run-bench NAME:
   && echo "{{NAME}}" > .tmp/NAME \
   && echo "MODEL := \"{{MODEL}}\"" > .tmp/Justfile.remote \
   && sed -e 's#__BASE_URL__#\"http://infra-wide-ep-inference-gateway-istio.llm-d-wide-ep.svc.cluster.local\"#g' Justfile.remote >> .tmp/Justfile.remote \
-  && kubectl cp .tmp/TIMESTAMP {{NAMESPACE}}/poker:/app/TIMESTAMP \
-  && kubectl cp .tmp/NAME {{NAMESPACE}}/poker:/app/NAME \
-  && kubectl cp .tmp/Justfile.remote {{NAMESPACE}}/poker:/app/Justfile \
-  && kubectl cp  ./run.sh {{NAMESPACE}}/poker:/app/run.sh \
-  && kubectl cp  ./ms-wide-ep/values.yaml {{NAMESPACE}}/poker:/app/values.yaml \
-  && {{KN}} exec poker -- bash /app/run.sh
+  && kubectl cp .tmp/TIMESTAMP {{NAMESPACE}}/benchmark-interactive:/app/TIMESTAMP \
+  && kubectl cp .tmp/NAME {{NAMESPACE}}/benchmark-interactive:/app/NAME \
+  && kubectl cp .tmp/Justfile.remote {{NAMESPACE}}/benchmark-interactive:/app/Justfile \
+  && kubectl cp  ./run.sh {{NAMESPACE}}/benchmark-interactive:/app/run.sh \
+  && kubectl cp  ./ms-wide-ep/values.yaml {{NAMESPACE}}/benchmark-interactive:/app/values.yaml \
+  && {{KN}} exec benchmark-interactive -- bash /app/run.sh
 
 cp-results:
-  kubectl cp poker:/app/results/$(cat ./.tmp/TIMESTAMP) \
+  kubectl cp benchmark-interactive:/app/results/$(cat ./.tmp/TIMESTAMP) \
     results/$(cat ./.tmp/TIMESTAMP)
 
 start:

@@ -26,6 +26,6 @@ cp "/app/values.yaml" "${outdir}/repro/values.yaml"
 
 
 # Sweep it
-for (( X=256; X<=32768; X*=2 )); do
+for (( X=8192; X<=32768; X*=2 )); do
   run_benchmark 2 128 2048
 done
