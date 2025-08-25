@@ -1,3 +1,5 @@
+# PD Disaggregation on GKE
+
 ## Installation
 
 1. Install your local dependencies (from `/llm-d-infra/quickstart`)
@@ -6,8 +8,7 @@
     ./install-deps.sh
     ```
 
-1. Use the quickstart to deploy Gateway CRDS + Gateway provider + Infra chart (from `/llm-d-infra/quickstart`). 
-
+1. Use the quickstart to deploy Gateway CRDS + Gateway provider + Infra chart (from `/llm-d-infra/quickstart`).
 
     ```bash
     # Set common environment variables
@@ -19,13 +20,13 @@
     # From the repo root
     cd quickstart
     export HF_TOKEN=$(YOUR_TOKEN)
-    ./llmd-infra-installer.sh --namespace ${NAMESPACE} -r infra-pd --gateway ${GATEWAY} --disable-metrics-collection
+    ./llmd-infra-installer.sh --namespace ${NAMESPACE} -r infra-pd --gateway ${GATEWAY}
     ```
 
-1. Use the helmfile to apply the modelservice and GIE charts on top of it. 
-   
-   * `--set provider.name=gke`: Sets the gaie gateway provider to `gke` so the chart will install GKE gateway related resources (`gcpbackendpolicy` and `healthcheckpolicy`).
-   * `--set 'decode.containers[0].resources.limits.rdma/ib=null'`: The example runs on GCP H200 instances which don't the `rdma/ib` resources out of the box. 
+1. Use the helmfile to apply the modelservice and GIE charts on top of it.
+
+   - `--set provider.name=gke`: Sets the gaie gateway provider to `gke` so the chart will install GKE gateway related resources (`gcpbackendpolicy` and `healthcheckpolicy`).
+   - `--set 'decode.containers[0].resources.limits.rdma/ib=null'`: The example runs on GCP H200 instances which don't the `rdma/ib` resources out of the box.
 
     ```bash
     cd examples/pd-disaggregation
@@ -44,10 +45,10 @@
 
     ```bash
     $ helm list -n ${NAMESPACE}
-    NAME    	NAMESPACE	REVISION	UPDATED                             	STATUS  	CHART                   	APP VERSION
-    gaie-pd 	llm-d-pd 	1       	2025-07-25 11:27:47.419598 -0700 PDT	deployed	inferencepool-v0.5.1    	v0.5.1
-    infra-pd	llm-d-pd 	1       	2025-07-25 11:27:18.453254 -0700 PDT	deployed	llm-d-infra-v1.1.1      	v0.2.0
-    ms-pd   	llm-d-pd 	1       	2025-07-25 11:27:53.138175 -0700 PDT	deployed	llm-d-modelservice-0.2.0	v0.2.0
+    NAME        NAMESPACE    REVISION    UPDATED                                 STATUS      CHART                       APP VERSION
+    gaie-pd     llm-d-pd     1           2025-07-25 11:27:47.419598 -0700 PDT    deployed    inferencepool-v0.5.1        v0.5.1
+    infra-pd    llm-d-pd     1           2025-07-25 11:27:18.453254 -0700 PDT    deployed    llm-d-infra-v1.1.1          v0.2.0
+    ms-pd       llm-d-pd     1           2025-07-25 11:27:53.138175 -0700 PDT    deployed    llm-d-modelservice-0.2.0    v0.2.0
     ```
 
 1. Next lets check our pod health of our 4 prefill replicas and 1 decode replica:
@@ -111,7 +112,7 @@
     ```
 
 1. Try curling the `v1/completions` endpoint:
-    
+
     ```bash
     curl -s http://${IP}:${PORT}/v1/completions \
       -H "Content-Type: application/json" \
@@ -150,6 +151,7 @@
 ## Cleanup
 
 To remove the deployment:
+
 ```bash
 # Remove the model services
 helmfile --selector managedBy=helmfile destroy --namespace ${NAMESPACE}

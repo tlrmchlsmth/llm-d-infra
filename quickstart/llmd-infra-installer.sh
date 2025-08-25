@@ -10,14 +10,11 @@ SCRIPT_DIR=""
 REPO_ROOT=""
 INSTALL_DIR=""
 CHART_DIR=""
-PROXY_UID=""
 VALUES_FILE="values.yaml"
 DEBUG=""
 KUBERNETES_CONTEXT=""
 SKIP_GATEWAY_PROVIDER=false
 ONLY_GATEWAY_PROVIDER=false
-DISABLE_METRICS=false
-MONITORING_NAMESPACE="llm-d-monitoring"
 GATEWAY_TYPE="istio"
 HELM_RELEASE_NAME="llm-d-infra"
 
@@ -39,7 +36,6 @@ Options:
   -d, --debug                       Add debug mode to the helm install
   -i, --skip-gateway-provider       Skip installing CRDs and the chose gateway control plane, only gateway instance and config
   -e, --only-gateway-provider       Only install CRDs and gateway control plane, skip gateway instance and config
-  -m, --disable-metrics-collection  Disable metrics collection (Prometheus will not be installed)
   -k, --minikube                    Deploy on an existing minikube instance with hostPath storage
   -g, --context                     Supply a specific Kubernetes context
   -j, --gateway                     Select gateway type (istio or kgateway)
@@ -97,35 +93,19 @@ check_cluster_reachability() {
   fi
 }
 
-# Derive an OpenShift PROXY_UID; default to 0 if not available
-fetch_kgateway_proxy_uid() {
-  log_info "Fetching OCP proxy UID..."
-  local uid_range
-  uid_range=$($KCMD get namespace "${NAMESPACE}" -o jsonpath='{.metadata.annotations.openshift\.io/sa\.scc\.uid-range}' 2>/dev/null || true)
-  if [[ -n "$uid_range" ]]; then
-    PROXY_UID=$(echo "$uid_range" | awk -F'/' '{print $1 + 1}')
-    log_success "Derived PROXY_UID=${PROXY_UID}"
-  else
-    PROXY_UID=0
-    log_info "No OpenShift SCC annotation found; defaulting PROXY_UID=${PROXY_UID}"
-  fi
-}
-
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      -z|--storage-size)               STORAGE_SIZE="$2"; shift 2 ;;
-      -c|--storage-class)              STORAGE_CLASS="$2"; shift 2 ;;
       -n|--namespace)                  NAMESPACE="$2"; shift 2 ;;
       -f|--values-file)                VALUES_FILE="$2"; shift 2 ;;
       -u|--uninstall)                  ACTION="uninstall"; shift ;;
       -d|--debug)                      DEBUG="--debug"; shift;;
       -i|--skip-gateway-provider)      SKIP_GATEWAY_PROVIDER=true; shift;;
       -e|--only-gateway-provider)      ONLY_GATEWAY_PROVIDER=true; shift;;
-      -m|--disable-metrics-collection) DISABLE_METRICS=true; shift;;
       -k|--minikube)                   USE_MINIKUBE=true; shift ;;
       -g|--context)                    KUBERNETES_CONTEXT="$2"; shift 2 ;;
       -j|--gateway)                    GATEWAY_TYPE="$2"; shift 2 ;;
+      -s|--service-type)               SERVICE_TYPE="$2"; shift 2 ;;
       -r|--release)                    HELM_RELEASE_NAME="$2"; shift 2 ;;
       -h|--help)                       print_help; exit 0 ;;
       *)                               die "Unknown option: $1" ;;
@@ -234,10 +214,6 @@ install() {
     return 0
   fi
 
-  if $KCMD get namespace "${MONITORING_NAMESPACE}" &>/dev/null; then
-    log_info "🧹 Cleaning up existing monitoring namespace..."
-    $KCMD delete namespace "${MONITORING_NAMESPACE}" --ignore-not-found
-  fi
 
   log_info "📦 Creating namespace ${NAMESPACE}..."
   $KCMD create namespace "${NAMESPACE}" --dry-run=client -o yaml | $KCMD apply -f -
@@ -256,9 +232,6 @@ install() {
     log_success "HF token secret \`${HF_NAME}\` created with secret stored in key \`${HF_KEY}\`"
   fi
 
-  # can be fetched non-invasily if using kgateway or not
-  fetch_kgateway_proxy_uid
-
   $HCMD repo add bitnami  https://charts.bitnami.com/bitnami
   log_info "🛠️ Building Helm chart dependencies..."
   $HCMD dependency build .
@@ -274,29 +247,6 @@ install() {
     OCP_DISABLE_INGRESS_ARGS=()
   fi
 
-  local metrics_enabled="true"
-  if [[ "${DISABLE_METRICS}" == "true" ]]; then
-    log_info "Metrics collection disabled by user request."
-    metrics_enabled="false"
-  else
-    if is_openshift; then
-      log_info "Using OpenShift's built-in monitoring stack."
-      if ! check_openshift_monitoring; then
-        log_info "⚠️ Metrics collection may not work properly in OpenShift without user workload monitoring enabled."
-      fi
-      # No Prometheus installation needed; metrics_enabled remains true for chart.
-    elif [[ "${USE_MINIKUBE}" == "true" ]]; then
-      log_info "🌱 Minikube detected; provisioning Prometheus/Grafana…"
-      install_prometheus_grafana
-    elif ! check_servicemonitor_crd; then
-      log_info "⚠️ ServiceMonitor CRD (monitoring.coreos.com) not found. Installing Prometheus stack."
-      install_prometheus_grafana
-    else
-      log_info "ServiceMonitor CRD found. Verifying Prometheus installation..."
-      install_prometheus_grafana
-    fi
-    log_info "Metrics collection enabled"
-  fi
 
   log_info "🚚 Deploying llm-d-infra chart with ${VALUES_PATH}..."
   $HCMD upgrade -i ${HELM_RELEASE_NAME} . \
@@ -305,9 +255,8 @@ install() {
     "${VALUES_ARGS[@]}" \
     "${OCP_DISABLE_INGRESS_ARGS[@]+"${OCP_DISABLE_INGRESS_ARGS[@]}"}" \
     --set gateway.gatewayClassName="${GATEWAY_TYPE}" \
-    --set gateway.gatewayParameters.proxyUID="${PROXY_UID}" \
     --set ingress.clusterRouterBase="${BASE_OCP_DOMAIN}" \
-    "${MODEL_OVERRIDE_ARGS[@]+"${MODEL_OVERRIDE_ARGS[@]}"}"
+    --set gateway.serviceType="${SERVICE_TYPE:-NodePort}"
   log_success "$HELM_RELEASE_NAME deployed"
 
   log_success "🎉 Installation complete."
@@ -325,92 +274,11 @@ uninstall() {
   log_info "🗑️ Deleting namespace ${NAMESPACE}..."
   $KCMD delete namespace "${NAMESPACE}" --ignore-not-found || true
 
-  log_info "🗑️ Deleting monitoring namespace..."
-  $KCMD delete namespace "${MONITORING_NAMESPACE}" --ignore-not-found || true
-
-  # Check if we installed the Prometheus stack and delete the ServiceMonitor CRD if we did
-  if $HCMD list -n "${MONITORING_NAMESPACE}" | grep -q "prometheus" 2>/dev/null; then
-    log_info "🗑️ Deleting ServiceMonitor CRD..."
-    $KCMD delete crd servicemonitors.monitoring.coreos.com --ignore-not-found || true
-  fi
 
   log_success "💀 Uninstallation complete"
 }
 
-check_servicemonitor_crd() {
-  log_info "🔍 Checking for ServiceMonitor CRD (monitoring.coreos.com)..."
-  if ! $KCMD get crd servicemonitors.monitoring.coreos.com &>/dev/null; then
-    log_info "⚠️ ServiceMonitor CRD (monitoring.coreos.com) not found"
-    return 1
-  fi
 
-  API_VERSION=$($KCMD get crd servicemonitors.monitoring.coreos.com -o jsonpath='{.spec.versions[?(@.served)].name}' 2>/dev/null || echo "")
-
-  if [[ -z "$API_VERSION" ]]; then
-    log_info "⚠️ Could not determine ServiceMonitor CRD API version"
-    return 1
-  fi
-
-  if [[ "$API_VERSION" == "v1" ]]; then
-    log_success "ServiceMonitor CRD (monitoring.coreos.com/v1) found"
-    return 0
-  else
-    log_info "⚠️ Found ServiceMonitor CRD but with unexpected API version: ${API_VERSION}"
-    return 1
-  fi
-}
-
-check_openshift_monitoring() {
-  if ! is_openshift; then
-    return 0
-  fi
-
-  log_info "🔍 Checking OpenShift user workload monitoring configuration..."
-
-  # Check if user workload monitoring is enabled
-  if $KCMD get configmap cluster-monitoring-config -n openshift-monitoring -o yaml 2>/dev/null | grep -q "enableUserWorkload: true"; then
-    log_success "✅ OpenShift user workload monitoring is properly configured"
-    return 0
-  fi
-
-  log_info "⚠️ OpenShift user workload monitoring is not enabled"
-  log_info "ℹ️ Enabling user workload monitoring allows metrics collection for the llm-d chart."
-
-  local monitoring_yaml=$(cat <<EOF
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: cluster-monitoring-config
-  namespace: openshift-monitoring
-data:
-  config.yaml: |
-    enableUserWorkload: true
-EOF
-)
-
-  # Prompt the user
-  log_info "📜 The following ConfigMap will be applied to enable user workload monitoring:"
-  echo "$monitoring_yaml"
-  read -p "Would you like to apply this ConfigMap to enable user workload monitoring? (y/N): " response
-  case "$response" in
-    [yY][eE][sS]|[yY])
-      log_info "🚀 Applying ConfigMap to enable user workload monitoring..."
-      echo "$monitoring_yaml" | oc create -f -
-      if [[ $? -eq 0 ]]; then
-        log_success "✅ OpenShift user workload monitoring enabled"
-        return 0
-      else
-        log_error "❌ Failed to apply ConfigMap. Metrics collection may not work."
-        return 1
-      fi
-      ;;
-    *)
-      log_info "⚠️ User chose not to enable user workload monitoring."
-      log_info "⚠️ Metrics collection may not work properly in OpenShift without user workload monitoring enabled."
-      return 1
-      ;;
-  esac
-}
 
 is_openshift() {
   # Check for OpenShift-specific resources
@@ -420,61 +288,6 @@ is_openshift() {
   return 1
 }
 
-install_prometheus_grafana() {
-  log_info "🌱 Provisioning Prometheus operator…"
-
-  if ! $KCMD get namespace "${MONITORING_NAMESPACE}" &>/dev/null; then
-    log_info "📦 Creating monitoring namespace..."
-    $KCMD create namespace "${MONITORING_NAMESPACE}"
-  else
-    log_info "📦 Monitoring namespace already exists"
-  fi
-
-  if ! $HCMD repo list 2>/dev/null | grep -q "prometheus-community"; then
-    log_info "📚 Adding prometheus-community helm repo..."
-    $HCMD repo add prometheus-community https://prometheus-community.github.io/helm-charts
-    $HCMD repo update
-  fi
-
-  if $HCMD list -n "${MONITORING_NAMESPACE}" | grep -q "prometheus"; then
-    log_info "⚠️ Prometheus stack already installed in ${MONITORING_NAMESPACE} namespace"
-    return 0
-  fi
-
-  log_info "🚀 Installing Prometheus stack..."
-  # Install minimal Prometheus stack with only essential configurations:
-  # - Basic ClusterIP services for Prometheus and Grafana
-  # - ServiceMonitor discovery enabled across namespaces
-  # - Default admin password for Grafana
-  # Note: Ingress and other advanced configurations are left to the user to customize
-  cat <<EOF > /tmp/prometheus-values.yaml
-grafana:
-  adminPassword: admin
-  service:
-    type: ClusterIP
-prometheus:
-  service:
-    type: ClusterIP
-  prometheusSpec:
-    serviceMonitorSelectorNilUsesHelmValues: false
-    serviceMonitorSelector: {}
-    serviceMonitorNamespaceSelector: {}
-    maximumStartupDurationSeconds: 300
-EOF
-
-  $HCMD install prometheus prometheus-community/kube-prometheus-stack \
-    --namespace "${MONITORING_NAMESPACE}" \
-    -f /tmp/prometheus-values.yaml \
-    1>/dev/null
-
-  rm -f /tmp/prometheus-values.yaml
-
-  log_info "⏳ Waiting for Prometheus stack pods to be ready..."
-  $KCMD wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n "${MONITORING_NAMESPACE}" --timeout=300s || true
-  $KCMD wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n "${MONITORING_NAMESPACE}" --timeout=300s || true
-
-  log_success "🚀 Prometheus and Grafana installed."
-}
 
 main() {
   parse_args "$@"

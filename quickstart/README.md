@@ -93,12 +93,19 @@ The installer needs to be run from the `llm-d-infra/quickstart` directory as a c
 | `-f`, `--values-file PATH`           | Path to Helm values.yaml file (default: values.yaml)          | `./llmd-infra-installer.sh --values-file /path/to/values.yaml`         |
 | `-u`, `--uninstall`                  | Uninstall the llm-d components from the current cluster       | `./llmd-infra-installer.sh --uninstall`                                |
 | `-d`, `--debug`                      | Add debug mode to the helm install                            | `./llmd-infra-installer.sh --debug`                                    |
-| `-m`, `--disable-metrics-collection` | Disable metrics collection (Prometheus will not be installed) | `./llmd-infra-installer.sh --disable-metrics-collection`               |
+| `-i`, `--skip-gateway-provider`      | Skip installing CRDs and the chose gateway control plane, only gateway instance and config | `./llmd-infra-installer.sh --skip-gateway-provider`                    |
+| `-e`, `--only-gateway-provider`      | Only install CRDs and gateway control plane, skip gateway instance and config | `./llmd-infra-installer.sh --only-gateway-provider`                    |
 | `-k`, `--minikube`                   | Deploy on an existing minikube instance with hostPath storage | `./llmd-infra-installer.sh --minikube`                                 |
 | `-g`, `--context`                    | Supply a specific Kubernetes context                          | `./llmd-infra-installer.sh --context`                                  |
-| `-j`, `--gateway`                    | Select gateway type (istio, kgateway) (default: istio)        | `./llm-installer.sh --gateway kgateway`                          |
-| `-r`, `--release `                   | (Helm) Chart release name                                     | `./llmd-infra-installer.sh --release llm-d-infra`                      |
+| `-j`, `--gateway`                    | Select gateway type (istio, kgateway) (default: istio)        | `./llmd-infra-installer.sh --gateway kgateway`                         |
+| `-r`, `--release`                    | (Helm) Chart release name                                     | `./llmd-infra-installer.sh --release llm-d-infra`                      |
 | `-h`, `--help`                       | Show this help and exit                                       | `./llmd-infra-installer.sh --help`                                     |
+
+***If you follow some [examples](./examples) after this installation, you have to change the namespace name according to the example you'll work on as follows.***
+
+- [inference-scheduling](./examples/inference-scheduling): llm-d-inference-scheduling
+- [pd-disaggregation](./examples/pd-disaggregation): llm-d-pd
+- [precise-prefix-cache-aware](./examples/precise-prefix-cache-aware): llm-d-wide-ep
 
 ## Examples
 
@@ -124,9 +131,9 @@ export HF_TOKEN="your-token"
 
 ### Validation
 
-After executing install script, you can find the resources will be created according to installation option.
+After executing the install script, you will find that resources are created according to the installation options.
 
-#### Installation with istio
+#### Installation with Istio
 
 - istio-system
 
@@ -143,6 +150,8 @@ service/istiod   ClusterIP   [Cluster IP]   <none>        15010/TCP,15012/TCP,44
 ```
 
 - llm-d
+
+***The Namespace name might differ depending on the installation option.***
 
 ```bash
 kubectl get pods,gateway -n llm-d
@@ -189,6 +198,8 @@ kgateway-ddbb7668c-cc9df   1/1     Running   0          25m
 
 - llm-d
 
+***The Namespace name might differ depending on the installation option.***
+
 ```bash
 kubectl get pods,gateway -n llm-d
 ```
@@ -198,7 +209,7 @@ NAME                                                 READY   STATUS    RESTARTS 
 pod/llm-d-infra-inference-gateway-69fd4dcfb9-nzs29   1/1     Running   0          22m
 
 NAME                                                              CLASS      ADDRESS        PROGRAMMED   AGE
-gateway.gateway.networking.k8s.io/llm-d-infra-inference-gateway   kgateway   [External IP]  True         22m
+gateway.gateway.networking.k8s.io/llm-d-infra-inference-gateway   kgateway   [IP Address]   True         22m
 ```
 
 - llm-d-monitoring
@@ -221,50 +232,11 @@ pod/prometheus-prometheus-node-exporter-szjwv                1/1     Running   0
 
 ### Metrics Collection
 
-llm-d-infra includes built-in support for metrics collection using Prometheus and Grafana. This feature is enabled by default but can be disabled using the
-`--disable-metrics-collection` flag during installation. llm-d applies ServiceMonitors for vLLM and inference-gateway services to trigger Prometheus
-scrape targets. In OpenShift, the built-in user workload monitoring Prometheus stack can be utilized. In Kubernetes, Prometheus and Grafana are installed from the
-prometheus-community [kube-prometheus-stack helm charts](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack).
-
-#### Accessing the Metrics UIs
-
-If running on OpenShift, skip to [OpenShift and Grafana](./docs/infra-providers/openshift/README-openshift.md#openshift-and-grafana).
-
-#### Port Forwarding
-
-- Prometheus (port 9090):
-
-```bash
-kubectl port-forward -n llm-d-monitoring --address 0.0.0.0 svc/prometheus-kube-prometheus-prometheus 9090:9090
-```
-
-- Grafana (port 3000):
-
-```bash
-kubectl port-forward -n llm-d-monitoring --address 0.0.0.0 svc/prometheus-grafana 3000:80
-```
-
-Access the User Interfaces at:
-
-- Prometheus: <http://YOUR_IP:9090>
-- Grafana: <http://YOUR_IP:3000> (default credentials: admin/admin)
-
-#### Grafana Dashboards
-
-Import the [llm-d dashboard](./grafana/dashboards/llm-d-dashboard.json) from the Grafana UI. Go to `Dashboards -> New -> Import`.
-Similarly, import the [inference-gateway dashboard](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/tools/dashboards/inference_gateway.json)
-from the gateway-api-inference-extension repository. Or, if the Grafana Operator is installed in your environment, you might follow the [Grafana setup guide](./grafana-setup.md)
-to install the dashboards as `GrafanaDashboard` custom resources.
-
-#### Security Note
-
-When running in a cloud environment (like EC2), make sure to:
-
-1. Configure your security groups to allow inbound traffic on ports 9090 and 3000 (if using port-forwarding)
-2. Use the `--address 0.0.0.0` flag with port-forward to allow external access
-3. Consider setting up proper authentication for production environments
-4. If using ingress, ensure proper TLS configuration and authentication
-5. For OpenShift, consider using the built-in OAuth integration for Grafana
+llm-d-infra includes support for metrics collection from vLLM pods. llm-d applies PodMonitors to trigger Prometheus
+scrape targets when enabled with llm-d-modelservice helm chart values. See [MONITORING.md](MONITORING.md) for details.
+In OpenShift, the built-in user workload monitoring Prometheus stack can be utilized to collect metrics.
+In Kubernetes, Prometheus and Grafana can be installed from the prometheus-community
+[kube-prometheus-stack helm charts](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack).
 
 ### Uninstall
 
